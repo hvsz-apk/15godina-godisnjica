@@ -152,7 +152,7 @@ class MainActivity : Activity() {
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
         when (keyCode) {
-            KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> { if (result.isNotBlank()) nextCustomer() else drawPrize(); return true }
+            KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> { if (result.isNotBlank()) askPin { nextCustomer() } else drawPrize(); return true }
             KeyEvent.KEYCODE_MENU, KeyEvent.KEYCODE_SETTINGS, KeyEvent.KEYCODE_BACK -> { askPin { adminDialog() }; return true }
         }
         return super.onKeyDown(keyCode, event)
@@ -254,7 +254,7 @@ class MainActivity : Activity() {
         override fun onTouchEvent(event: android.view.MotionEvent): Boolean {
             if (event.action == android.view.MotionEvent.ACTION_UP) {
                 val x = event.x / width; val y = event.y / height
-                if (result.isNotBlank() && x in .55f.. .9f && y in .70f.. .91f) nextCustomer()
+                if (result.isNotBlank() && x in .55f.. .9f && y in .70f.. .91f) askPin { nextCustomer() }
                 else if (result.isBlank() && x in .55f.. .9f && y in .59f.. .80f) drawPrize()
                 else if (x > .94f && y > .90f) askPin { adminDialog() }
                 return true
