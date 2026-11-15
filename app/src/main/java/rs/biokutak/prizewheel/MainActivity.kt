@@ -512,14 +512,4 @@ class MainActivity : Activity() {
             }
         }
     }
-}        fun moveFocus(dx:Int,dy:Int) {
-            if(selected>=0 || opening || reveal) return
-            val col=(focused%5+dx).coerceIn(0,4)
-            val row=(focused/5+dy).coerceIn(0,2)
-            focused=row*5+col; invalidate()
-        }
-        fun activateFocus() {
-            if(reveal) nextCustomer() else if(!opening && selected<0) choosePackage(focused)
-        }
-    }
 }
