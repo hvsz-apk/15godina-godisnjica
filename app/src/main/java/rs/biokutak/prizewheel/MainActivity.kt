@@ -359,29 +359,20 @@ class MainActivity : Activity() {
             }
         }
 
+        private val stageBitmap: Bitmap by lazy { BitmapFactory.decodeResource(resources, R.drawable.anniversary_stage) }
         private fun drawBackdrop(c: Canvas, w: Float, h: Float) {
-            p.shader = RadialGradient(w*.5f,h*.35f,w*.82f,intArrayOf(Color.rgb(94,10,30),Color.rgb(35,4,18),Color.rgb(5,3,9)),null,Shader.TileMode.CLAMP)
-            c.drawRect(0f,0f,w,h,p); p.shader = null
-            // theatre spotlights
-            val sweep = (System.currentTimeMillis()%9000L)/9000f
-            for (i in 0..1) {
-                val sx = if (i==0) w*.08f else w*.92f
-                val ex = w*(if(i==0) .34f+.08f*sin(sweep*6.28f) else .66f-.08f*sin(sweep*6.28f))
-                val beam = Path().apply { moveTo(sx,h*.04f); lineTo(ex-w*.13f,h*.72f); lineTo(ex+w*.13f,h*.72f); close() }
-                p.shader = LinearGradient(sx,h*.05f,ex,h*.72f,intArrayOf(Color.argb(0,255,211,123),Color.argb(24,255,188,75),Color.argb(0,255,211,123)),null,Shader.TileMode.CLAMP)
-                c.drawPath(beam,p); p.shader = null
-                paint(Color.argb(180,255,229,161)); p.setShadowLayer(18f,0f,0f,Color.rgb(255,174,52))
-                c.drawCircle(sx,h*.045f,h*.009f,p); p.clearShadowLayer()
-            }
-            val now = System.currentTimeMillis()
+            val bmp=stageBitmap
+            val scale=max(w/bmp.width,h/bmp.height)
+            val sw=bmp.width*scale; val sh=bmp.height*scale
+            val dst=RectF((w-sw)/2f,(h-sh)/2f,(w+sw)/2f,(h+sh)/2f)
+            paint(Color.BLACK); c.drawRect(0f,0f,w,h,p)
+            p.color=Color.WHITE; p.alpha=255; c.drawBitmap(bmp,null,dst,p)
+            val now=System.currentTimeMillis()
             for (s in sparkles) {
-                val y = ((s[1] + (now%16000L)/16000f*.12f) % 1f) * h
-                val twinkle = (100 + 130*(.5+.5*sin(now/550.0+s[3]))).toInt()
-                drawStar(c,s[0]*w,y,s[2],twinkle)
+                val y=((s[1]+(now%16000L)/16000f*.12f)%1f)*h
+                val twinkle=(75+115*(.5+.5*sin(now/550.0+s[3]))).toInt()
+                drawStar(c,s[0]*w,y,s[2]*.75f,twinkle)
             }
-            // Fine double gold frame
-            paint(Color.argb(180,222,171,76),Paint.Style.STROKE,2f); c.drawRoundRect(RectF(12f,10f,w-12f,h-10f),26f,26f,p)
-            paint(Color.argb(75,255,232,166),Paint.Style.STROKE,1f); c.drawRoundRect(RectF(20f,18f,w-20f,h-18f),22f,22f,p)
         }
 
         override fun onDraw(c: Canvas) {
