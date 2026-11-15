@@ -171,7 +171,7 @@ class MainActivity : Activity() {
         val scroll = ScrollView(this).apply { addView(rows) }
         fun rebuild() {
             rows.removeAllViews()
-            rows.addView(TextView(this).apply { text = "NAZIV PAKETA"; textSize = 12f; setTextColor(Color.DKGRAY })
+            rows.addView(TextView(this).apply { text = "NAZIV PAKETA"; textSize = 12f; setTextColor(Color.DKGRAY) })
             rows.addView(packageName)
             rows.addView(TextView(this).apply { text = "NAGRADE U OVOM PAKETU"; textSize = 16f; setTextColor(Color.BLACK); setPadding(0, 20, 0, 8) })
             editors.forEachIndexed { n, e ->
