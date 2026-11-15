@@ -348,42 +348,96 @@ class MainActivity : Activity() {
             super.onDraw(c)
             val w = width.toFloat()
             val h = height.toFloat()
-            c.drawColor(Color.rgb(13, 7, 9))
-            val bg = Paint(3).apply {
+            val goldBright = Color.rgb(255, 224, 145)
+            val gold = Color.rgb(218, 166, 62)
+            val cream = Color.rgb(255, 246, 218)
+
+            // Deep burgundy stage with a dramatic central spotlight.
+            c.drawColor(Color.rgb(5, 4, 8))
+            val backdrop = Paint(3).apply {
                 shader = LinearGradient(0f, 0f, w, h,
-                    intArrayOf(Color.rgb(38, 7, 13), Color.rgb(10, 8, 12), Color.rgb(53, 12, 16)),
+                    intArrayOf(Color.rgb(7, 5, 12), Color.rgb(42, 5, 16), Color.rgb(8, 5, 12)),
+                    floatArrayOf(0f, .52f, 1f), Shader.TileMode.CLAMP)
+            }
+            c.drawRect(0f, 0f, w, h, backdrop)
+            val glow = Paint(3).apply {
+                shader = RadialGradient(w * .36f, h * .50f, h * .78f,
+                    intArrayOf(Color.argb(95, 171, 30, 39), Color.argb(25, 105, 10, 23), Color.TRANSPARENT),
                     null, Shader.TileMode.CLAMP)
             }
-            c.drawRect(0f, 0f, w, h, bg)
-            val cx = w * .36f
-            val cy = h * .53f
-            val radius = min(w * .29f, h * .39f)
+            c.drawRect(0f, 0f, w, h, glow)
 
-            text(c, "BIO KUTAK", w * .69f, h * .13f, h * .075f, gold, true, Paint.Align.CENTER)
-            text(c, "15 GODINA ZAJEDNO", w * .69f, h * .21f, h * .043f, Color.WHITE, true, Paint.Align.CENTER)
-            text(c, "VELIKO NAGRADNO IZVLAČENJE", w * .69f, h * .27f, h * .023f, Color.LTGRAY, false, Paint.Align.CENTER)
-
+            // Fine gold framing and subtle stage rays.
             paint.shader = null
             paint.style = Paint.Style.STROKE
-            paint.strokeWidth = radius * .065f
-            paint.color = Color.rgb(116, 65, 22)
-            c.drawCircle(cx, cy, radius + 13f, paint)
-            paint.strokeWidth = radius * .018f
+            paint.strokeWidth = 2f
+            paint.color = Color.argb(150, 190, 139, 49)
+            c.drawRoundRect(RectF(12f, 12f, w - 12f, h - 12f), 28f, 28f, paint)
+            paint.strokeWidth = 1f
+            paint.color = Color.argb(55, 255, 221, 140)
+            for (i in 0..17) {
+                val x = w * (i / 17f)
+                c.drawLine(x, 0f, x + (x - w * .36f) * .16f, h, paint)
+            }
+
+            val cx = w * .355f
+            val cy = h * .535f
+            val radius = min(w * .285f, h * .405f)
+
+            // Anniversary header, gold embossed typography.
+            text(c, "BIO KUTAK", w * .70f, h * .115f, h * .078f, goldBright, true, Paint.Align.CENTER)
+            text(c, "15 GODINA ZAJEDNO", w * .70f, h * .195f, h * .040f, cream, true, Paint.Align.CENTER)
+            paint.style = Paint.Style.STROKE
+            paint.strokeWidth = 1.5f
             paint.color = gold
-            c.drawCircle(cx, cy, radius + 25f, paint)
-            for (i in 0 until 40) {
-                val a = Math.toRadians(i * 9.0)
-                val x = cx + cos(a).toFloat() * (radius + 25f)
-                val y = cy + sin(a).toFloat() * (radius + 25f)
+            c.drawLine(w * .55f, h * .225f, w * .85f, h * .225f, paint)
+            paint.style = Paint.Style.FILL
+            text(c, "VELIKO JUBILARNO IZVLAČENJE", w * .70f, h * .265f, h * .021f, Color.rgb(238, 204, 137), true, Paint.Align.CENTER)
+
+            // The wheel's gold pedestal and illuminated marquee.
+            paint.shader = RadialGradient(cx, cy, radius * 1.42f,
+                intArrayOf(Color.argb(90, 255, 197, 74), Color.argb(25, 255, 166, 50), Color.TRANSPARENT),
+                null, Shader.TileMode.CLAMP)
+            c.drawCircle(cx, cy, radius * 1.42f, paint)
+            paint.shader = null
+            paint.style = Paint.Style.FILL
+            paint.shader = LinearGradient(cx - radius, cy - radius, cx + radius, cy + radius,
+                intArrayOf(Color.rgb(255, 226, 144), Color.rgb(111, 57, 18), Color.rgb(255, 214, 103)),
+                null, Shader.TileMode.CLAMP)
+            c.drawCircle(cx, cy, radius + 31f, paint)
+            paint.shader = null
+            paint.color = Color.rgb(24, 12, 14)
+            c.drawCircle(cx, cy, radius + 22f, paint)
+            paint.style = Paint.Style.STROKE
+            paint.strokeWidth = 5f
+            paint.color = goldBright
+            c.drawCircle(cx, cy, radius + 18f, paint)
+            paint.strokeWidth = 2f
+            paint.color = Color.rgb(103, 57, 24)
+            c.drawCircle(cx, cy, radius + 9f, paint)
+
+            // Animated bulbs around the circumference.
+            val pulse = ((System.currentTimeMillis() / 360L) % 2L).toInt()
+            for (i in 0 until  sixtyBulbs()) {
+                val a = Math.toRadians(i * 6.0 - 90.0)
+                val bx = cx + cos(a).toFloat() * (radius + 25f)
+                val by = cy + sin(a).toFloat() * (radius + 25f)
                 paint.style = Paint.Style.FILL
-                paint.color = if (i % 2 == 0) Color.rgb(255, 225, 133) else Color.rgb(147, 63, 27)
-                c.drawCircle(x, y, radius * .012f, paint)
+                paint.color = if ((i + pulse) % 2 == 0) goldBright else Color.rgb(163, 83, 27)
+                c.drawCircle(bx, by, radius * .014f, paint)
+                if ((i + pulse) % 2 == 0) {
+                    paint.style = Paint.Style.STROKE
+                    paint.strokeWidth = 1.5f
+                    paint.color = Color.argb(150, 255, 220, 135)
+                    c.drawCircle(bx, by, radius * .023f, paint)
+                }
             }
 
             var wheelRotation = settledAngle
             if (animating) {
-                val t = ((System.currentTimeMillis() - animStart) / 4200f).coerceIn(0f, 1f)
-                val eased = 1f - (1f - t).pow(4)
+                val t = ((System.currentTimeMillis() - animStart) / 5200f).coerceIn(0f, 1f)
+                // Long fast phase followed by a pronounced slow-down.
+                val eased = if (t < .72f) (t / .72f) * .88f else .88f + .12f * (1f - (1f - (t - .72f) / .28f).pow(4))
                 wheelRotation = startAngle + (endAngle - startAngle) * eased
                 if (t < 1f) postInvalidateOnAnimation()
                 else {
@@ -399,75 +453,144 @@ class MainActivity : Activity() {
             val wheelRect = RectF(cx - radius, cy - radius, cx + radius, cy + radius)
             if (active.isEmpty()) {
                 paint.style = Paint.Style.FILL
-                paint.shader = null
-                paint.color = Color.rgb(94, 12, 23)
+                paint.shader = RadialGradient(cx, cy, radius,
+                    intArrayOf(Color.rgb(255, 213, 106), Color.rgb(135, 19, 35), Color.rgb(42, 5, 15)),
+                    null, Shader.TileMode.CLAMP)
                 c.drawCircle(cx, cy, radius, paint)
+                paint.shader = null
                 text(c, "HVALA", cx, cy + radius * .07f, radius * .19f, Color.WHITE, true, Paint.Align.CENTER)
             } else {
-                val colors = intArrayOf(Color.rgb(132, 20, 30), Color.rgb(28, 26, 31), Color.rgb(166, 111, 32), Color.rgb(94, 12, 23), Color.rgb(42, 34, 27))
+                val colors = intArrayOf(
+                    Color.rgb(151, 13, 35), Color.rgb(28, 23, 35), Color.rgb(184, 119, 30),
+                    Color.rgb(105, 8, 26), Color.rgb(34, 42, 49), Color.rgb(143, 74, 19),
+                    Color.rgb(92, 12, 37), Color.rgb(37, 25, 21)
+                )
                 val totalWeight = active.sumOf { it.weight }.coerceAtLeast(1)
                 var sweepStart = -90f
                 active.forEachIndexed { i, prize ->
                     val sweep = 360f * prize.weight / totalWeight.toFloat()
-                    val middle = sweepStart + sweep / 2f
+                    val mid = sweepStart + sweep / 2f
+                    val base = colors[i % colors.size]
                     paint.style = Paint.Style.FILL
+                    paint.shader = SweepGradient(cx, cy,
+                        intArrayOf(Color.rgb(255, 238, 174), base, Color.rgb(20, 8, 14), base),
+                        floatArrayOf(0f, .12f, .58f, 1f))
+                    c.drawArc(wheelRect, sweepStart, sweep, true, paint)
                     paint.shader = null
-                    paint.color = colors[i % colors.size]
-                    c.drawArc(wheelRect, sweepStart, sweep, true, paint)
+                    // Bright metallic separators.
                     paint.style = Paint.Style.STROKE
-                    paint.strokeWidth = max(2f, radius * .012f)
-                    paint.color = gold
+                    paint.strokeWidth = max(2.5f, radius * .009f)
+                    paint.color = goldBright
                     c.drawArc(wheelRect, sweepStart, sweep, true, paint)
-                    val a = Math.toRadians(middle.toDouble())
+                    val a = Math.toRadians(mid.toDouble())
                     val tx = cx + cos(a).toFloat() * radius * .64f
                     val ty = cy + sin(a).toFloat() * radius * .64f
-                    val labelSize = min(h * .023f, (radius * sweep / 360f) * .30f).coerceAtLeast(h * .009f)
-                    if (sweep > 8f) {
+                    if (sweep >= 7f) {
+                        val labelSize = min(h * .026f, (radius * sweep / 360f) * .32f).coerceAtLeast(h * .009f)
                         c.save()
-                        c.rotate(middle + 90f, tx, ty)
-                        text(c, prize.name.take(if (active.size > 10) 9 else 20), tx, ty, labelSize, Color.WHITE, true, Paint.Align.CENTER)
+                        c.rotate(mid + 90f, tx, ty)
+                        text(c, prize.name.uppercase().take(if (active.size > 12) 8 else 22), tx, ty, labelSize, cream, true, Paint.Align.CENTER)
+                        if (sweep > 17f && active.size <= 10) {
+                            text(c, "POKLON", tx, ty + labelSize * 1.35f, labelSize * .55f, goldBright, true, Paint.Align.CENTER)
+                        }
                         c.restore()
                     }
                     sweepStart += sweep
                 }
+                // Glossy glass highlight over the upper half of the wheel.
+                paint.style = Paint.Style.FILL
+                paint.shader = LinearGradient(cx, cy - radius, cx, cy + radius,
+                    intArrayOf(Color.argb(70, 255, 255, 255), Color.argb(0, 255, 255, 255), Color.argb(28, 0, 0, 0)),
+                    floatArrayOf(0f, .48f, 1f), Shader.TileMode.CLAMP)
+                c.drawCircle(cx, cy, radius - 3f, paint)
+                paint.shader = null
             }
 
+            // Layered centre cap with anniversary medallion.
             paint.style = Paint.Style.FILL
-            paint.shader = RadialGradient(cx, cy, radius * .23f,
-                intArrayOf(Color.rgb(255, 224, 132), Color.rgb(151, 94, 24), Color.rgb(48, 17, 16)),
+            paint.shader = RadialGradient(cx - radius * .07f, cy - radius * .08f, radius * .27f,
+                intArrayOf(Color.rgb(255, 244, 190), Color.rgb(208, 151, 48), Color.rgb(92, 40, 13)),
                 null, Shader.TileMode.CLAMP)
-            c.drawCircle(cx, cy, radius * .23f, paint)
+            c.drawCircle(cx, cy, radius * .245f, paint)
             paint.shader = null
-            text(c, "15", cx, cy + radius * .045f, radius * .23f, Color.WHITE, true, Paint.Align.CENTER)
+            paint.style = Paint.Style.STROKE
+            paint.strokeWidth = radius * .018f
+            paint.color = Color.rgb(255, 231, 157)
+            c.drawCircle(cx, cy, radius * .205f, paint)
+            text(c, "BIO", cx, cy - radius * .015f, radius * .075f, Color.rgb(67, 22, 14), true, Paint.Align.CENTER)
+            text(c, "15", cx, cy + radius * .105f, radius * .105f, Color.rgb(67, 22, 14), true, Paint.Align.CENTER)
             c.restore()
 
-            paint.color = gold
-            val path = Path().apply {
-                moveTo(cx, cy - radius - 28f)
-                lineTo(cx - 25f, cy - radius + 16f)
-                lineTo(cx + 25f, cy - radius + 16f)
+            // Fixed illuminated pointer at 12 o'clock.
+            paint.style = Paint.Style.FILL
+            paint.shader = LinearGradient(cx - 28f, cy - radius - 44f, cx + 28f, cy - radius + 22f,
+                intArrayOf(Color.rgb(255, 244, 188), Color.rgb(227, 43, 36), Color.rgb(105, 5, 18)),
+                null, Shader.TileMode.CLAMP)
+            val pointer = Path().apply {
+                moveTo(cx, cy - radius + 28f)
+                lineTo(cx - 30f, cy - radius - 27f)
+                lineTo(cx + 30f, cy - radius - 27f)
                 close()
             }
-            c.drawPath(path, paint)
+            c.drawPath(pointer, paint)
+            paint.shader = null
+            paint.style = Paint.Style.STROKE
+            paint.strokeWidth = 3f
+            paint.color = goldBright
+            c.drawPath(pointer, paint)
 
-            val rightX = w * .69f
-            if (result.isNotBlank()) {
-                text(c, "ČESTITAMO!", rightX, h * .43f, h * .07f, gold, true, Paint.Align.CENTER)
-                text(c, result, rightX, h * .54f, h * .043f, Color.WHITE, true, Paint.Align.CENTER)
-                text(c, "HVALA ŠTO STE DEO NAŠE PRIČE", rightX, h * .64f, h * .024f, gold, true, Paint.Align.CENTER)
-                button(c, rightX, h * .80f, w * .22f, h * .105f, "SLEDEĆI KUPAC", gold)
-            } else {
-                text(c, "ZAVRTI TOČAK SREĆE!", rightX, h * .46f, h * .046f, Color.WHITE, true, Paint.Align.CENTER)
-                text(c, "Osvoji poklon povodom našeg jubileja", rightX, h * .53f, h * .022f, Color.LTGRAY, false, Paint.Align.CENTER)
-                button(c, rightX, h * .68f, w * .25f, h * .14f, if (customerReady) "ZAVRTI TOČAK" else "SAČEKAJ", gold)
-            }
-            text(c, "HVALA ŠTO STE NAŠ KUPAC!", w * .5f, h * .965f, h * .021f, Color.rgb(218, 184, 112), false, Paint.Align.CENTER)
+            val rightX = w * .705f
+            // Right-side premium information panel.
+            val panel = RectF(w * .535f, h * .315f, w * .875f, h * .92f)
             paint.style = Paint.Style.FILL
-            paint.color = Color.rgb(80, 48, 18)
-            c.drawRoundRect(RectF(w * .88f, h * .035f, w * .985f, h * .105f), 18f, 18f, paint)
-            text(c, "⚙ ADMIN", w * .932f, h * .082f, h * .025f, Color.WHITE, true, Paint.Align.CENTER)
-            text(c, "ADMIN: MENU / BACK", w * .96f, h * .97f, h * .014f, Color.GRAY, false, Paint.Align.RIGHT)
+            paint.shader = LinearGradient(panel.left, panel.top, panel.right, panel.bottom,
+                intArrayOf(Color.rgb(38, 12, 19), Color.rgb(13, 10, 17), Color.rgb(48, 13, 20)),
+                null, Shader.TileMode.CLAMP)
+            c.drawRoundRect(panel, 30f, 30f, paint)
+            paint.shader = null
+            paint.style = Paint.Style.STROKE
+            paint.strokeWidth = 2.5f
+            paint.color = gold
+            c.drawRoundRect(panel, 30f, 30f, paint)
+
+            if (result.isNotBlank()) {
+                text(c, "OSVOJILI STE!", rightX, h * .435f, h * .058f, goldBright, true, Paint.Align.CENTER)
+                text(c, result.uppercase().take(32), rightX, h * .535f, h * .038f, Color.WHITE, true, Paint.Align.CENTER)
+                text(c, "ČESTITAMO I HVALA NA POVERENJU", rightX, h * .625f, h * .020f, Color.rgb(241, 205, 133), true, Paint.Align.CENTER)
+                button(c, rightX, h * .79f, w * .245f, h * .115f, "SLEDEĆI KUPAC", goldBright)
+                // Confetti burst after the wheel has stopped and the prize is visible.
+                for (i in 0 until 42) {
+                    val seed = i * 37
+                    val px = rightX + (((seed * 17) % 181) - 90) * w / 900f
+                    val py = h * (.34f + ((seed * 13) % 54) / 100f)
+                    paint.style = Paint.Style.FILL
+                    paint.color = intArrayOf(goldBright, Color.rgb(214, 35, 48), Color.WHITE, Color.rgb(63, 170, 135))[i % 4]
+                    c.save()
+                    c.rotate((seed * 11 % 120).toFloat(), px, py)
+                    c.drawRoundRect(RectF(px - 3f, py - 7f, px + 3f, py + 7f), 2f, 2f, paint)
+                    c.restore()
+                }
+            } else {
+                text(c, "DA LI STE SPREMNI?", rightX, h * .425f, h * .035f, goldBright, true, Paint.Align.CENTER)
+                text(c, "ZAVRTITE TOČAK", rightX, h * .495f, h * .055f, Color.WHITE, true, Paint.Align.CENTER)
+                text(c, "I OSVOJITE JUBILARNI POKLON", rightX, h * .555f, h * .020f, Color.rgb(238, 205, 155), false, Paint.Align.CENTER)
+                button(c, rightX, h * .72f, w * .265f, h * .145f, if (customerReady) "ZAVRTI TOČAK!" else "SREĆNO!", goldBright)
+                text(c, "15 GODINA • 15 GODINA RADOSTI", rightX, h * .86f, h * .017f, Color.rgb(210, 177, 120), true, Paint.Align.CENTER)
+            }
+
+            // Top-right admin access is deliberately visible to staff.
+            paint.style = Paint.Style.FILL
+            paint.shader = LinearGradient(w * .88f, h * .025f, w * .99f, h * .11f,
+                intArrayOf(Color.rgb(255, 224, 145), Color.rgb(130, 77, 21)),
+                null, Shader.TileMode.CLAMP)
+            c.drawRoundRect(RectF(w * .88f, h * .025f, w * .985f, h * .11f), 18f, 18f, paint)
+            paint.shader = null
+            text(c, "⚙ ADMIN", w * .932f, h * .082f, h * .023f, Color.rgb(38, 12, 14), true, Paint.Align.CENTER)
+            text(c, "HVALA ŠTO STE DEO NAŠE PRIČE", w * .5f, h * .972f, h * .018f, Color.rgb(225, 190, 126), true, Paint.Align.CENTER)
+            if (animating) postInvalidateOnAnimation()
         }
+
+        private fun sixtyBulbs() = 60
 
         private fun button(c: Canvas, x: Float, y: Float, bw: Float, bh: Float, label: String, color: Int) {
             paint.style = Paint.Style.FILL
