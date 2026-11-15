@@ -25,6 +25,10 @@ class MainActivity : Activity() {
     private val packages = mutableListOf<GiftPackage>()
     private var selected = -1
     private var opening = false
+    private var spinning = false
+    private var spinStart = 0L
+    private var spinTarget = -1
+    private var carouselIndex = 0
     private var reveal = false
     private var rewardText = ""
     private var animationStart = 0L
@@ -83,7 +87,7 @@ class MainActivity : Activity() {
     private fun available(box: GiftPackage) = box.rewards.any { it.enabled && it.stock > 0 && it.percent > 0 }
 
     private fun choosePackage(index: Int) {
-        if (opening || reveal || index !in 0..14) return
+        if (opening || reveal || spinning || index !in 0..14) return
         val box = packages[index]
         if (!available(box)) {
             Toast.makeText(this, "Ovaj paket je trenutno ispražnjen.", Toast.LENGTH_SHORT).show()
@@ -107,9 +111,34 @@ class MainActivity : Activity() {
         screen.postInvalidateOnAnimation()
     }
 
+    private fun startSpin() {
+        if (opening || reveal || spinning || selected >= 0) return
+        val candidates = packages.indices.filter { available(packages[it]) }
+        if (candidates.isEmpty()) {
+            Toast.makeText(this, "Svi poklon paketi su trenutno ispražnjeni.", Toast.LENGTH_LONG).show()
+            return
+        }
+        spinTarget = candidates.random()
+        spinning = true
+        spinStart = System.currentTimeMillis()
+        tones.startTone(ToneGenerator.TONE_PROP_BEEP, 120)
+        screen.invalidate()
+        screen.postInvalidateOnAnimation()
+    }
+
+    private fun finishSpin() {
+        if (!spinning) return
+        spinning = false
+        selected = spinTarget
+        screen.invalidate()
+        tones.startTone(ToneGenerator.TONE_PROP_ACK, 180)
+    }
+
     private fun nextCustomer() {
         if (opening) return
         selected = -1
+        spinning = false
+        spinTarget = -1
         reveal = false
         rewardText = ""
         tones.startTone(ToneGenerator.TONE_PROP_ACK, 140)
@@ -232,10 +261,7 @@ class MainActivity : Activity() {
         when (keyCode) {
             KeyEvent.KEYCODE_MENU, KeyEvent.KEYCODE_SETTINGS -> { askPin { adminDialog() }; return true }
             KeyEvent.KEYCODE_BACK -> { if (reveal) { nextCustomer(); return true }; askPin { adminDialog() }; return true }
-            KeyEvent.KEYCODE_DPAD_LEFT -> { screen.moveFocus(-1, 0); return true }
-            KeyEvent.KEYCODE_DPAD_RIGHT -> { screen.moveFocus(1, 0); return true }
-            KeyEvent.KEYCODE_DPAD_UP -> { screen.moveFocus(0, -1); return true }
-            KeyEvent.KEYCODE_DPAD_DOWN -> { screen.moveFocus(0, 1); return true }
+            KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_RIGHT, KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN -> { screen.activateFocus(); return true }
             KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> {
                 screen.activateFocus()
                 return true
@@ -362,105 +388,111 @@ class MainActivity : Activity() {
             super.onDraw(c)
             val w=width.toFloat(); val h=height.toFloat()
             drawBackdrop(c,w,h)
-            // Header plaque
-            val plaque=RectF(w*.22f,h*.025f,w*.78f,h*.155f)
-            rounded(c,plaque,22f,intArrayOf(Color.rgb(58,7,22),Color.rgb(19,5,12)),gold,2.5f)
-            text(c,"BIO KUTAK",w*.5f,h*.078f,h*.052f,paleGold)
-            text(c,"15 GODINA ZAJEDNO",w*.5f,h*.126f,h*.025f,cream)
-            text(c,if(reveal) "VEČE ZA PAMĆENJE — ČESTITAMO!" else "IZABERITE SVOJ SREĆNI POKLON",w*.5f,h*.205f,h*.029f,gold)
-            // subtle decorative separators
-            paint(Color.argb(190,213,158,63),Paint.Style.STROKE,1.5f)
-            c.drawLine(w*.12f,h*.222f,w*.34f,h*.222f,p); c.drawLine(w*.66f,h*.222f,w*.88f,h*.222f,p)
-            val mx=w*.045f; val gx=w*.014f; val gy=h*.022f
-            val top=h*.255f; val bottom=h*.885f
-            val cw=(w-2*mx-4*gx)/5f; val ch=(bottom-top-2*gy)/3f
+            // Grand anniversary title in the background
+            text(c,"BIO KUTAK",w*.5f,h*.105f,h*.055f,paleGold)
+            text(c,"15 GODINA SA VAMA",w*.5f,h*.165f,h*.034f,cream)
+            text(c,"HVALA ŠTO STE DEO NAŠE PRIČE",w*.5f,h*.205f,h*.018f,gold,false)
+            // A single hero gift on a circular golden roulette stage
+            val cx=w*.5f; val cy=h*.565f
+            val radius=min(w*.265f,h*.285f)
+            val now=System.currentTimeMillis()
+            val rotation=if(spinning) {
+                val elapsed=(now-spinStart).toFloat()
+                val t=(elapsed/4200f).coerceIn(0f,1f)
+                val eased=1f-(1f-t).pow(3)
+                val totalTurns=7.5f
+                val base=spinTarget.coerceAtLeast(0)* (360f/15f)
+                (eased*totalTurns*360f + base) % 360f
+            } else carouselIndex*24f
+            // Outer glowing ring
+            paint(Color.argb(45,255,207,104)); p.setShadowLayer(35f,0f,0f,Color.rgb(255,179,54))
+            c.drawCircle(cx,cy,radius*1.22f,p); p.clearShadowLayer()
+            paint(gold,Paint.Style.STROKE,5f); c.drawCircle(cx,cy,radius*1.18f,p)
+            paint(Color.argb(120,255,231,166),Paint.Style.STROKE,1.5f); c.drawCircle(cx,cy,radius*1.10f,p)
+            // Moving marquee bulbs
+            for(i in 0 until 36) {
+                val a=i*Math.PI*2/36.0 + if(spinning) now/900.0 else 0.0
+                val bx=cx+cos(a).toFloat()*radius*1.18f
+                val by=cy+sin(a).toFloat()*radius*1.18f
+                drawStar(c,bx,by,if(i%3==0) 4f else 2.3f,if(i%3==0) 255 else 170)
+            }
+            // Orbiting package markers imply 15 prizes without showing a grid
             for(i in 0 until 15) {
-                val col=i%5; val row=i/5
-                val x=mx+col*(cw+gx); val y=top+row*(ch+gy)
-                val card=RectF(x,y,x+cw,y+ch)
-                val chosen=selected==i
-                val enabled=available(packages[i])
-                val dim=selected>=0 && !chosen
-                val alpha=if(dim) 58 else if(!enabled) 70 else 255
-                c.saveLayerAlpha(card,alpha)
-                // card has bevelled dark glass and inset trim
-                rounded(c,card,18f,intArrayOf(Color.rgb(80,13,31),Color.rgb(23,7,17),Color.rgb(52,7,22)),if(chosen) paleGold else if(enabled) Color.rgb(187,132,48) else Color.rgb(79,65,61),if(chosen) 4f else 1.5f)
-                val inner=RectF(card.left+5,card.top+5,card.right-5,card.bottom-5)
-                paint(Color.argb(65,255,228,155),Paint.Style.STROKE,1f); c.drawRoundRect(inner,14f,14f,p)
-                if(chosen && opening) {
-                    val t=((System.currentTimeMillis()-animationStart)/4800f).coerceIn(0f,1f)
-                    animationProgress=t
-                    val ease=if(t<.58f) t/.58f else 1f-(1f-(t-.58f)/.42f).pow(3)
-                    val br=RectF(card.left+cw*.07f,card.top+ch*.02f,card.right-cw*.07f,card.bottom-ch*.02f)
-                    c.save(); val scale=1f+.18f*sin(ease*Math.PI).toFloat()
-                    c.scale(scale,scale,card.centerX(),card.centerY())
-                    drawGift(c,br,t>.68f,ease,false); c.restore()
-                    text(c,if(t<.68f) "OTVARANJE POKLONA..." else "MAGIJA!",card.centerX(),card.bottom-h*.012f,h*.017f,gold)
-                    if(t<1f) postInvalidateOnAnimation() else finishOpening()
-                } else {
-                    // embossed package number medallion
-                    val med=RectF(card.centerX()-cw*.13f,card.top+ch*.025f,card.centerX()+cw*.13f,card.top+ch*.15f)
-                    rounded(c,med,med.height()*.45f,intArrayOf(Color.rgb(255,220,130),Color.rgb(139,81,20)),Color.rgb(255,239,182),1f)
-                    text(c,String.format("%02d",i+1),card.centerX(),med.centerY()+h*.008f,h*.022f,Color.rgb(55,20,8))
-                    val br=RectF(card.left+cw*.06f,card.top+ch*.12f,card.right-cw*.06f,card.bottom-ch*.10f)
-                    drawGift(c,br,chosen&&reveal,1f,false)
-                    text(c,packages[i].name.uppercase().take(20),card.centerX(),card.bottom-h*.018f,h*.016f,cream)
-                    if(!enabled) text(c,"RASPRODATO",card.centerX(),card.centerY()+h*.045f,h*.018f,Color.rgb(255,150,150))
-                }
-                if(i==focused && selected<0 && enabled) {
-                    paint(Color.argb(220,255,224,135),Paint.Style.STROKE,2.5f)
-                    c.drawRoundRect(RectF(card.left-3,card.top-3,card.right+3,card.bottom+3),20f,20f,p)
-                }
+                val a=(i*24f+rotation)*Math.PI/180.0
+                val px=cx+cos(a).toFloat()*radius*.91f
+                val py=cy+sin(a).toFloat()*radius*.91f
+                val active=if(spinning) i==spinTarget else i==selected
+                paint(if(available(packages[i])) gold else Color.DKGRAY)
+                p.setShadowLayer(if(active) 18f else 4f,0f,0f,if(active) gold else Color.BLACK)
+                c.drawCircle(px,py,if(active) 9f else 4.5f,p); p.clearShadowLayer()
+            }
+            // Centre pedestal and hero gift
+            val pedestal=RectF(cx-radius*.72f,cy+radius*.52f,cx+radius*.72f,cy+radius*.77f)
+            rounded(c,pedestal,30f,intArrayOf(Color.rgb(255,220,133),Color.rgb(121,69,21),Color.rgb(255,211,105)),Color.rgb(255,240,184),2f)
+            val giftRect=RectF(cx-radius*.68f,cy-radius*.72f,cx+radius*.68f,cy+radius*.62f)
+            if(opening) {
+                val t=((now-animationStart)/4800f).coerceIn(0f,1f)
+                animationProgress=t
+                val ease=if(t<.58f) t/.58f else 1f-(1f-(t-.58f)/.42f).pow(3)
+                c.save()
+                val scale=1f+.20f*sin(ease*Math.PI).toFloat()
+                c.scale(scale,scale,cx,cy)
+                drawGift(c,giftRect,t>.68f,ease,true)
                 c.restore()
+                if(t<1f) postInvalidateOnAnimation() else finishOpening()
+            } else {
+                drawGift(c,giftRect,false,0f,true)
+            }
+            // Current package index, no package grid
+            if(selected>=0 && !reveal) {
+                val tag=RectF(cx-radius*.36f,cy+radius*.82f,cx+radius*.36f,cy+radius*1.04f)
+                rounded(c,tag,18f,intArrayOf(Color.rgb(255,225,144),Color.rgb(155,91,24)),Color.WHITE,1.5f)
+                text(c,"PAKET ${selected+1}",cx,tag.centerY()+h*.009f,h*.025f,Color.rgb(49,17,8))
+            }
+            val headline=when {
+                reveal -> "VEČE ZA PAMĆENJE — ČESTITAMO!"
+                opening -> "OTVARA SE VAŠ POKLON..."
+                spinning -> "IZVLAČIMO VAŠ POKLON..."
+                selected>=0 -> "PRITISNITE OK I OTVORITE PAKET"
+                else -> "PRITISNITE OK I ZAVRTITE POKLON-KOLO"
+            }
+            text(c,headline,cx,h*.875f,h*.026f,gold)
+            if(spinning) {
+                val t=((now-spinStart)/4200f).coerceIn(0f,1f)
+                carouselIndex=(carouselIndex+1)%15
+                if(t>=1f) finishSpin() else postInvalidateOnAnimation()
             }
             if(reveal) {
-                // Full-screen cinematic prize reveal over a darkened stage
                 paint(Color.argb(205,3,1,7)); c.drawRect(0f,0f,w,h,p)
                 val panel=RectF(w*.17f,h*.19f,w*.83f,h*.84f)
                 p.shader=LinearGradient(panel.left,panel.top,panel.right,panel.bottom,intArrayOf(Color.rgb(92,7,27),Color.rgb(20,5,14),Color.rgb(71,5,23)),null,Shader.TileMode.CLAMP)
                 c.drawRoundRect(panel,34f,34f,p); p.shader=null
                 paint(Color.rgb(255,214,112),Paint.Style.STROKE,5f); c.drawRoundRect(panel,34f,34f,p)
-                paint(Color.argb(100,255,232,160),Paint.Style.STROKE,1.5f); c.drawRoundRect(RectF(panel.left+10,panel.top+10,panel.right-10,panel.bottom-10),27f,27f,p)
-                // gold fireworks
-                val now=System.currentTimeMillis()
-                for(burst in 0..3) {
-                    val bx=panel.left+panel.width()*(.18f+burst*.21f)
-                    val by=panel.top+panel.height()*(.20f+(burst%2)*.08f)
+                val tnow=System.currentTimeMillis()
+                for(burst in 0..4) {
+                    val bx=panel.left+panel.width()*(.12f+burst*.19f)
+                    val by=panel.top+panel.height()*(.18f+(burst%2)*.09f)
                     for(k in 0..23) {
                         val a=k*Math.PI*2/24
-                        val d=18f+((now/30+k*7+burst*19)%55)
-                        drawStar(c,bx+cos(a).toFloat()*d,by+sin(a).toFloat()*d,2.2f,220)
+                        val d=18f+((tnow/30+k*7+burst*19)%65)
+                        drawStar(c,bx+cos(a).toFloat()*d,by+sin(a).toFloat()*d,2.5f,230)
                     }
                 }
-                text(c,"ČESTITAMO!",w*.5f,h*.32f,h*.065f,paleGold)
-                text(c,"OSVOJILI STE",w*.5f,h*.405f,h*.028f,cream)
-                // prize presented as a gold illuminated title plate
+                text(c,"ČESTITAMO!",cx,h*.32f,h*.065f,paleGold)
+                text(c,"OSVOJILI STE",cx,h*.405f,h*.028f,cream)
                 val prizePlate=RectF(w*.25f,h*.455f,w*.75f,h*.59f)
                 rounded(c,prizePlate,18f,intArrayOf(Color.rgb(255,227,153),Color.rgb(157,97,27),Color.rgb(255,218,119)),Color.WHITE,2f)
-                text(c,rewardText.uppercase().take(48),w*.5f,h*.535f,h*.037f,Color.rgb(47,13,9))
-                text(c,"HVALA ŠTO STE DEO NAŠE PRIČE",w*.5f,h*.645f,h*.023f,paleGold)
-                text(c,"BIO KUTAK  •  15 GODINA ZAJEDNO",w*.5f,h*.69f,h*.018f,cream,false)
+                text(c,rewardText.uppercase().take(48),cx,h*.535f,h*.037f,Color.rgb(47,13,9))
+                text(c,"HVALA ŠTO STE DEO NAŠE PRIČE",cx,h*.645f,h*.023f,paleGold)
+                text(c,"BIO KUTAK  •  15 GODINA SA VAMA",cx,h*.69f,h*.018f,cream,false)
                 val btn=RectF(w*.36f,h*.735f,w*.64f,h*.815f)
                 rounded(c,btn,18f,intArrayOf(Color.rgb(255,214,116),Color.rgb(139,77,18)),Color.WHITE,2f)
-                text(c,"SLEDEĆI KUPAC",w*.5f,h*.768f,h*.023f,Color.rgb(43,12,7))
-            } else {
-                text(c,if(opening) "SAČEKAJTE IZNENAĐENJE..." else "DODIRNITE PAKET I OTKRIJTE SVOJ POKLON",w*.5f,h*.945f,h*.022f,cream,false)
+                text(c,"SLEDEĆI KUPAC",cx,h*.768f,h*.023f,Color.rgb(43,12,7))
             }
-            // discreet but visible admin control
             val admin=RectF(w*.885f,h*.035f,w*.975f,h*.105f)
             rounded(c,admin,12f,intArrayOf(Color.rgb(110,65,21),Color.rgb(40,19,12)),gold,1.5f)
             text(c,"ADMIN",admin.centerX(),admin.centerY()+h*.007f,h*.018f,paleGold)
-            if(!reveal) postInvalidateOnAnimation()
-        }
-
-        private fun packageAt(x:Float,y:Float):Int {
-            val mx=.045f; val gx=.014f; val gy=.022f; val top=.255f; val bottom=.885f
-            val cw=(1f-2*mx-4*gx)/5f; val ch=(bottom-top-2*gy)/3f
-            if(x<mx || x>1f-mx || y<top || y>bottom) return -1
-            val col=((x-mx)/(cw+gx)).toInt().coerceIn(0,4)
-            val row=((y-top)/(ch+gy)).toInt().coerceIn(0,2)
-            val lx=(x-mx)-col*(cw+gx); val ly=(y-top)-row*(ch+gy)
-            return if(lx<=cw && ly<=ch) row*5+col else -1
+            if(!reveal && !opening && !spinning) postInvalidateDelayed(80)
         }
 
         override fun onTouchEvent(event: MotionEvent): Boolean {
@@ -468,11 +500,19 @@ class MainActivity : Activity() {
             val x=event.x/width; val y=event.y/height
             if(x>.88f && y<.12f) { askPin { adminDialog() }; return true }
             if(reveal) { if(x in .30f.. .70f && y in .70f.. .85f) nextCustomer(); return true }
-            if(!opening && selected<0) packageAt(x,y).takeIf { it>=0 }?.let { focused=it; choosePackage(it) }
+            if(spinning || opening) return true
+            if(selected<0) startSpin() else choosePackage(selected)
             return true
         }
 
-        fun moveFocus(dx:Int,dy:Int) {
+        fun activateFocus() {
+            if(reveal) nextCustomer()
+            else if(!spinning && !opening) {
+                if(selected<0) startSpin() else choosePackage(selected)
+            }
+        }
+    }
+}        fun moveFocus(dx:Int,dy:Int) {
             if(selected>=0 || opening || reveal) return
             val col=(focused%5+dx).coerceIn(0,4)
             val row=(focused/5+dy).coerceIn(0,2)
