@@ -194,6 +194,15 @@ class MainActivity : Activity() {
                 c.drawCircle(x, y, radius * .012f, paint)
             }
             val wheelRect = RectF(cx - radius, cy - radius, cx + radius, cy + radius)
+            var wheelRotation = 0f
+            if (animating) {
+                val t = ((System.currentTimeMillis() - animStart) / 4200f).coerceIn(0f, 1f)
+                val eased = 1f - (1f - t).pow(4)
+                wheelRotation = startAngle + (endAngle - startAngle) * eased
+                if (t < 1f) postInvalidateOnAnimation() else { animating = false; finishSpin() }
+            }
+            c.save()
+            c.rotate(wheelRotation, cx, cy)
             val colors = intArrayOf(Color.rgb(132, 20, 30), Color.rgb(28, 26, 31), Color.rgb(166, 111, 32), Color.rgb(94, 12, 23), Color.rgb(42, 34, 27))
             for (i in 0 until 5) {
                 paint.style = Paint.Style.FILL; paint.shader = null; paint.color = colors[i]
@@ -208,16 +217,10 @@ class MainActivity : Activity() {
             paint.style = Paint.Style.FILL; paint.shader = RadialGradient(cx, cy, radius * .23f, intArrayOf(Color.rgb(255, 224, 132), Color.rgb(151, 94, 24), Color.rgb(48, 17, 16)), null, Shader.TileMode.CLAMP)
             c.drawCircle(cx, cy, radius * .23f, paint); paint.shader = null
             text(c, "15", cx, cy + radius * .045f, radius * .23f, Color.WHITE, true, Paint.Align.CENTER)
+            c.restore()
             paint.color = gold
             val path = Path().apply { moveTo(cx, cy - radius - 28f); lineTo(cx - 25f, cy - radius + 16f); lineTo(cx + 25f, cy - radius + 16f); close() }
             c.drawPath(path, paint)
-            if (animating) {
-                val t = ((System.currentTimeMillis() - animStart) / 4200f).coerceIn(0f, 1f)
-                val eased = 1f - (1f - t).pow(4)
-                paint.style = Paint.Style.STROKE; paint.strokeWidth = 8f; paint.color = Color.WHITE
-                c.drawArc(wheelRect, startAngle + (endAngle - startAngle) * eased, 360f, false, paint)
-                if (t < 1f) postInvalidateOnAnimation() else { animating = false; finishSpin() }
-            }
             val rightX = w * .69f
             if (result.isNotBlank()) {
                 text(c, "ČESTITAMO!", rightX, h * .43f, h * .07f, gold, true, Paint.Align.CENTER)
