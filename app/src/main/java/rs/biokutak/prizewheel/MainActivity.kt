@@ -21,6 +21,8 @@ class MainActivity : Activity() {
     private val prizes = mutableListOf<Prize>()
     private var wheelPrizes = listOf<Prize>()
     private var result = ""
+    private var pendingResult = ""
+    private var pendingPrize: Prize? = null
     private var spinning = false
     private var customerReady = true
     private var history = 0
@@ -93,8 +95,10 @@ class MainActivity : Activity() {
         val total = wheelPrizes.sumOf { it.weight }
         spinning = true
         customerReady = false
+        result = ""
+        pendingPrize = null
         if (total <= 0 || wheelPrizes.isEmpty()) {
-            result = "HVALA ŠTO STE NAŠ KUPAC!"
+            pendingResult = "HVALA ŠTO STE NAŠ KUPAC!"
             wheelView.animateNoPrize()
             return
         }
@@ -105,20 +109,21 @@ class MainActivity : Activity() {
             pick < 0
         }.coerceAtLeast(0)
         val chosen = wheelPrizes[chosenIndex]
-        chosen.stock = (chosen.stock - 1).coerceAtLeast(0)
-        result = chosen.name
-
-        // Wheel is drawn with its first segment starting at -90 degrees.
-        // Rotate the selected segment's centre exactly under the fixed top pointer.
-        val segment = 360f / wheelPrizes.size
-        val selectedCenter = -90f + (chosenIndex + 0.5f) * segment
-        val targetRotation = ((-90f - selectedCenter) % 360f + 360f) % 360f
-        saveState()
-        wheelView.animateSpin(targetRotation + 360f * 6f)
+        pendingPrize = chosen
+        pendingResult = chosen.name
+        var beforeWeight = 0
+        for (i in 0 until chosenIndex) beforeWeight += wheelPrizes[i].weight
+        val selectedCenter = -90f + 360f * (beforeWeight + chosen.weight / 2f) / total.toFloat()
+        val targetNormalized = ((-90f - selectedCenter) % 360f + 360f) % 360f
+        wheelView.animateSpinTo(targetNormalized, 7)
     }
 
     private fun finishSpin() {
         spinning = false
+        pendingPrize?.let { it.stock = (it.stock - 1).coerceAtLeast(0) }
+        pendingPrize = null
+        result = pendingResult
+        pendingResult = ""
         history++
         refreshWheelPrizes()
         saveState()
@@ -317,20 +322,23 @@ class MainActivity : Activity() {
         private val gold = Color.rgb(226, 184, 76)
         private var animStart = 0L
         private var animating = false
+        private var startAngle = 0f
         private var endAngle = 0f
-        private var noPrizeAnimation = false
+        private var settledAngle = 0f
 
-        fun animateSpin(target: Float) {
-            endAngle = target
-            noPrizeAnimation = false
+        fun animateSpinTo(targetNormalized: Float, turns: Int) {
+            startAngle = settledAngle
+            val current = ((settledAngle % 360f) + 360f) % 360f
+            val delta = ((targetNormalized - current) % 360f + 360f) % 360f
+            endAngle = settledAngle + turns * 360f + delta
             animStart = System.currentTimeMillis()
             animating = true
             postInvalidateOnAnimation()
         }
 
         fun animateNoPrize() {
-            endAngle = 0f
-            noPrizeAnimation = true
+            startAngle = settledAngle
+            endAngle = settledAngle + 360f * 5f
             animStart = System.currentTimeMillis()
             animating = true
             postInvalidateOnAnimation()
@@ -372,14 +380,15 @@ class MainActivity : Activity() {
                 c.drawCircle(x, y, radius * .012f, paint)
             }
 
-            var wheelRotation = 0f
+            var wheelRotation = settledAngle
             if (animating) {
                 val t = ((System.currentTimeMillis() - animStart) / 4200f).coerceIn(0f, 1f)
                 val eased = 1f - (1f - t).pow(4)
-                wheelRotation = endAngle * eased
+                wheelRotation = startAngle + (endAngle - startAngle) * eased
                 if (t < 1f) postInvalidateOnAnimation()
                 else {
                     animating = false
+                    settledAngle = ((endAngle % 360f) + 360f) % 360f
                     finishSpin()
                 }
             }
@@ -396,25 +405,30 @@ class MainActivity : Activity() {
                 text(c, "HVALA", cx, cy + radius * .07f, radius * .19f, Color.WHITE, true, Paint.Align.CENTER)
             } else {
                 val colors = intArrayOf(Color.rgb(132, 20, 30), Color.rgb(28, 26, 31), Color.rgb(166, 111, 32), Color.rgb(94, 12, 23), Color.rgb(42, 34, 27))
-                val segment = 360f / active.size
+                val totalWeight = active.sumOf { it.weight }.coerceAtLeast(1)
+                var sweepStart = -90f
                 active.forEachIndexed { i, prize ->
-                    val start = -90f + i * segment
+                    val sweep = 360f * prize.weight / totalWeight.toFloat()
+                    val middle = sweepStart + sweep / 2f
                     paint.style = Paint.Style.FILL
                     paint.shader = null
                     paint.color = colors[i % colors.size]
-                    c.drawArc(wheelRect, start, segment, true, paint)
+                    c.drawArc(wheelRect, sweepStart, sweep, true, paint)
                     paint.style = Paint.Style.STROKE
-                    paint.strokeWidth = max(2f, radius * .008f)
+                    paint.strokeWidth = max(2f, radius * .012f)
                     paint.color = gold
-                    c.drawArc(wheelRect, start, segment, true, paint)
-                    val a = Math.toRadians((start + segment / 2f).toDouble())
+                    c.drawArc(wheelRect, sweepStart, sweep, true, paint)
+                    val a = Math.toRadians(middle.toDouble())
                     val tx = cx + cos(a).toFloat() * radius * .64f
                     val ty = cy + sin(a).toFloat() * radius * .64f
-                    val labelSize = min(h * .021f, (radius / max(1f, active.size.toFloat())) * .55f).coerceAtLeast(h * .010f)
-                    text(c, prize.name.take(if (active.size > 8) 10 else 18), tx, ty, labelSize, Color.WHITE, true, Paint.Align.CENTER)
-                    if (active.size <= 8) {
-                        text(c, "KOM: ${prize.stock}", tx, ty + h * .025f, h * .012f, gold, false, Paint.Align.CENTER)
+                    val labelSize = min(h * .023f, (radius * sweep / 360f) * .30f).coerceAtLeast(h * .009f)
+                    if (sweep > 8f) {
+                        c.save()
+                        c.rotate(middle + 90f, tx, ty)
+                        text(c, prize.name.take(if (active.size > 10) 9 else 20), tx, ty, labelSize, Color.WHITE, true, Paint.Align.CENTER)
+                        c.restore()
                     }
+                    sweepStart += sweep
                 }
             }
 
@@ -448,6 +462,10 @@ class MainActivity : Activity() {
                 button(c, rightX, h * .68f, w * .25f, h * .14f, if (customerReady) "ZAVRTI TOČAK" else "SAČEKAJ", gold)
             }
             text(c, "HVALA ŠTO STE NAŠ KUPAC!", w * .5f, h * .965f, h * .021f, Color.rgb(218, 184, 112), false, Paint.Align.CENTER)
+            paint.style = Paint.Style.FILL
+            paint.color = Color.rgb(80, 48, 18)
+            c.drawRoundRect(RectF(w * .88f, h * .035f, w * .985f, h * .105f), 18f, 18f, paint)
+            text(c, "⚙ ADMIN", w * .932f, h * .082f, h * .025f, Color.WHITE, true, Paint.Align.CENTER)
             text(c, "ADMIN: MENU / BACK", w * .96f, h * .97f, h * .014f, Color.GRAY, false, Paint.Align.RIGHT)
         }
 
@@ -479,7 +497,7 @@ class MainActivity : Activity() {
                 val y = event.y / height
                 if (result.isNotBlank() && x in .55f.. .9f && y in .70f.. .91f) nextCustomer()
                 else if (result.isBlank() && x in .55f.. .9f && y in .59f.. .80f) drawPrize()
-                else if (x > .94f && y > .90f) askPin { adminDialog() }
+                else if ((x > .86f && y < .13f) || (x > .94f && y > .90f)) askPin { adminDialog() }
                 return true
             }
             return true
