@@ -120,7 +120,7 @@ class MainActivity : Activity() {
         if (!opening) return
         opening = false
         reveal = true
-        tones.startTone(ToneGenerator.TONE_CELEBRATION, 1100)
+        tones.startTone(ToneGenerator.TONE_PROP_BEEP2, 1100)
         history++
         save()
         screen.invalidate()
@@ -482,5 +482,4 @@ class MainActivity : Activity() {
             if(reveal) nextCustomer() else if(!opening && selected<0) choosePackage(focused)
         }
     }
-}
 }
