@@ -261,7 +261,15 @@ class MainActivity : Activity() {
         when (keyCode) {
             KeyEvent.KEYCODE_MENU, KeyEvent.KEYCODE_SETTINGS -> { askPin { adminDialog() }; return true }
             KeyEvent.KEYCODE_BACK -> { if (reveal) { nextCustomer(); return true }; askPin { adminDialog() }; return true }
-            KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_RIGHT, KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN -> { screen.activateFocus(); return true }
+            KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_RIGHT,
+            KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN -> {
+                // Direction keys only move the idle carousel. They must never trigger a draw/open.
+                if (!spinning && !opening && !reveal && selected < 0) {
+                    carouselIndex = (carouselIndex + if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT || keyCode == KeyEvent.KEYCODE_DPAD_UP) 14 else 1) % 15
+                    screen.invalidate()
+                }
+                return true
+            }
             KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> {
                 screen.activateFocus()
                 return true
@@ -392,8 +400,9 @@ class MainActivity : Activity() {
                 val t=(elapsed/4200f).coerceIn(0f,1f)
                 val eased=1f-(1f-t).pow(3)
                 val totalTurns=7.5f
-                val base=spinTarget.coerceAtLeast(0)* (360f/15f)
-                (eased*totalTurns*360f + base) % 360f
+                val targetAngle=spinTarget.coerceAtLeast(0)*(360f/15f)
+                // The selected marker must finish exactly at the fixed pointer (right-hand side).
+                (eased*totalTurns*360f - targetAngle) % 360f
             } else carouselIndex*24f
             // Outer glowing ring
             paint(Color.argb(45,255,207,104)); p.setShadowLayer(35f,0f,0f,Color.rgb(255,179,54))
@@ -407,16 +416,33 @@ class MainActivity : Activity() {
                 val by=cy+sin(a).toFloat()*radius*1.18f
                 drawStar(c,bx,by,if(i%3==0) 4f else 2.3f,if(i%3==0) 255 else 170)
             }
-            // Orbiting package markers imply 15 prizes without showing a grid
+            // Fifteen premium package markers orbit around the hero gift.
             for(i in 0 until 15) {
                 val a=(i*24f+rotation)*Math.PI/180.0
                 val px=cx+cos(a).toFloat()*radius*.91f
                 val py=cy+sin(a).toFloat()*radius*.91f
                 val active=if(spinning) i==spinTarget else i==selected
-                paint(if(available(packages[i])) gold else Color.DKGRAY)
-                p.setShadowLayer(if(active) 18f else 4f,0f,0f,if(active) gold else Color.BLACK)
-                c.drawCircle(px,py,if(active) 9f else 4.5f,p); p.clearShadowLayer()
+                val dotR=if(active) 8f else 4f
+                paint(if(available(packages[i])) Color.rgb(255,211,125) else Color.rgb(82,65,58))
+                p.setShadowLayer(if(active) 22f else 5f,0f,0f,if(active) Color.rgb(255,173,57) else Color.BLACK)
+                c.drawCircle(px,py,dotR,p); p.clearShadowLayer()
+                if(active) {
+                    paint(Color.rgb(255,241,195),Paint.Style.STROKE,2f)
+                    c.drawCircle(px,py,14f,p); p.style=Paint.Style.FILL
+                }
             }
+            // Fixed pointer makes the selected package unambiguous when the carousel stops.
+            val pointerX=cx+radius*1.12f
+            val pointerY=cy
+            val pointer=Path().apply {
+                moveTo(pointerX+radius*.11f,pointerY)
+                lineTo(pointerX+radius*.02f,pointerY-radius*.075f)
+                lineTo(pointerX+radius*.02f,pointerY+radius*.075f)
+                close()
+            }
+            p.shader=LinearGradient(pointerX,pointerY-radius*.08f,pointerX,pointerY+radius*.08f,intArrayOf(Color.rgb(255,244,196),Color.rgb(193,126,37)),null,Shader.TileMode.CLAMP)
+            c.drawPath(pointer,p); p.shader=null
+            paint(Color.rgb(255,238,177),Paint.Style.STROKE,2f); c.drawPath(pointer,p)
             // Centre pedestal and hero gift
             val pedestal=RectF(cx-radius*.72f,cy+radius*.52f,cx+radius*.72f,cy+radius*.77f)
             rounded(c,pedestal,30f,intArrayOf(Color.rgb(255,220,133),Color.rgb(121,69,21),Color.rgb(255,211,105)),Color.rgb(255,240,184),2f)
