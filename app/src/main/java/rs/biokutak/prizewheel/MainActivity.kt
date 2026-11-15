@@ -8,6 +8,8 @@ import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
+import android.media.AudioManager
+import android.media.ToneGenerator
 import android.widget.*
 import org.json.JSONArray
 import org.json.JSONObject
@@ -29,6 +31,7 @@ class MainActivity : Activity() {
     private var animationProgress = 0f
     private var history = 0
     private lateinit var screen: PackageView
+    private val tones by lazy { ToneGenerator(AudioManager.STREAM_MUSIC, 78) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -96,6 +99,7 @@ class MainActivity : Activity() {
         selected = index
         rewardText = prize.name
         opening = true
+        tones.startTone(ToneGenerator.TONE_PROP_BEEP, 180)
         reveal = false
         animationProgress = 0f
         animationStart = System.currentTimeMillis()
@@ -108,6 +112,7 @@ class MainActivity : Activity() {
         selected = -1
         reveal = false
         rewardText = ""
+        tones.startTone(ToneGenerator.TONE_PROP_ACK, 140)
         screen.invalidate()
     }
 
@@ -115,6 +120,7 @@ class MainActivity : Activity() {
         if (!opening) return
         opening = false
         reveal = true
+        tones.startTone(ToneGenerator.TONE_CELEBRATION, 1100)
         history++
         save()
         screen.invalidate()
@@ -226,8 +232,12 @@ class MainActivity : Activity() {
         when (keyCode) {
             KeyEvent.KEYCODE_MENU, KeyEvent.KEYCODE_SETTINGS -> { askPin { adminDialog() }; return true }
             KeyEvent.KEYCODE_BACK -> { if (reveal) { nextCustomer(); return true }; askPin { adminDialog() }; return true }
+            KeyEvent.KEYCODE_DPAD_LEFT -> { screen.moveFocus(-1, 0); return true }
+            KeyEvent.KEYCODE_DPAD_RIGHT -> { screen.moveFocus(1, 0); return true }
+            KeyEvent.KEYCODE_DPAD_UP -> { screen.moveFocus(0, -1); return true }
+            KeyEvent.KEYCODE_DPAD_DOWN -> { screen.moveFocus(0, 1); return true }
             KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> {
-                if (reveal) nextCustomer() else if (!opening && selected < 0) choosePackage(0)
+                screen.activateFocus()
                 return true
             }
         }
@@ -236,138 +246,241 @@ class MainActivity : Activity() {
 
     inner class PackageView : View(this@MainActivity) {
         private val p = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
-        private val gold = Color.rgb(239, 194, 91)
-        private val cream = Color.rgb(255, 246, 224)
-        private val red = Color.rgb(133, 13, 34)
+        private val gold = Color.rgb(244, 194, 77)
+        private val paleGold = Color.rgb(255, 231, 166)
+        private val cream = Color.rgb(255, 247, 226)
+        private val ruby = Color.rgb(147, 8, 34)
+        private val deep = Color.rgb(12, 4, 12)
         private val rect = RectF()
+        private var focused = 0
+        private val sparkles = Array(90) { i -> floatArrayOf(Random.nextFloat(), Random.nextFloat(), 1.2f + Random.nextFloat() * 3f, Random.nextFloat() * 6.28f) }
 
-        private fun txt(c: Canvas, s: String, x: Float, y: Float, size: Float, color: Int, bold: Boolean = true, align: Paint.Align = Paint.Align.CENTER) {
-            p.shader = null; p.style = Paint.Style.FILL; p.color = color; p.textSize = size; p.textAlign = align
-            p.typeface = Typeface.create(if (bold) "sans-serif-condensed" else "sans-serif", if (bold) Typeface.BOLD else Typeface.NORMAL)
-            c.drawText(s, x, y, p)
+        private fun paint(color: Int, style: Paint.Style = Paint.Style.FILL, width: Float = 1f) {
+            p.shader = null; p.color = color; p.style = style; p.strokeWidth = width; p.alpha = 255
         }
 
-        private fun drawGift(c: Canvas, r: RectF, open: Boolean, scale: Float = 1f) {
-            val cx = r.centerX(); val cy = r.centerY()
-            val bw = r.width() * .57f * scale; val bh = r.height() * .42f * scale
-            val left = cx - bw / 2; val top = cy - bh / 2 + r.height() * .08f
-            val box = RectF(left, top, left + bw, top + bh)
-            p.style = Paint.Style.FILL
-            p.shader = LinearGradient(left, top, left + bw, top + bh, intArrayOf(Color.rgb(210, 33, 49), Color.rgb(92, 4, 24)), null, Shader.TileMode.CLAMP)
-            c.drawRoundRect(box, 12f * scale, 12f * scale, p); p.shader = null
-            p.color = gold; c.drawRect(cx - bw * .10f, top, cx + bw * .10f, top + bh, p)
-            c.drawRect(left, top + bh * .38f, left + bw, top + bh * .52f, p)
-            // Lid floats upward during the reveal.
-            val lidY = if (open) top - bh * .62f else top - bh * .10f
-            val lid = RectF(left - bw * .08f, lidY, left + bw * 1.08f, lidY + bh * .19f)
-            p.shader = LinearGradient(lid.left, lid.top, lid.right, lid.bottom, intArrayOf(Color.rgb(255, 222, 133), Color.rgb(170, 112, 32)), null, Shader.TileMode.CLAMP)
-            c.drawRoundRect(lid, 8f * scale, 8f * scale, p); p.shader = null
-            // Bow.
-            p.style = Paint.Style.STROKE; p.strokeWidth = 7f * scale; p.strokeCap = Paint.Cap.ROUND; p.color = gold
-            val bow = Path().apply { moveTo(cx, lidY); cubicTo(cx - bw * .45f, lidY - bh * .40f, cx - bw * .35f, lidY - bh * .05f, cx, lidY); cubicTo(cx + bw * .35f, lidY - bh * .05f, cx + bw * .45f, lidY - bh * .40f, cx, lidY) }
-            c.drawPath(bow, p); p.style = Paint.Style.FILL
-            if (open) {
-                for (i in 0..17) {
-                    val a = i * (Math.PI * 2 / 18)
-                    val sx = cx + cos(a).toFloat() * bw * .56f
-                    val sy = top - bh * .20f + sin(a).toFloat() * bh * .55f
-                    p.color = if (i % 2 == 0) gold else Color.WHITE
-                    c.drawCircle(sx, sy, 4f * scale, p)
-                }
+        private fun text(c: Canvas, value: String, x: Float, y: Float, size: Float, color: Int, bold: Boolean = true, align: Paint.Align = Paint.Align.CENTER) {
+            paint(color)
+            p.textSize = size; p.textAlign = align
+            p.typeface = Typeface.create(if (bold) "sans-serif-condensed" else "sans-serif", if (bold) Typeface.BOLD else Typeface.NORMAL)
+            p.setShadowLayer(if (color == gold || color == paleGold) 12f else 2f, 0f, 2f, Color.argb(150, 0, 0, 0))
+            c.drawText(value, x, y, p); p.clearShadowLayer()
+        }
+
+        private fun rounded(c: Canvas, r: RectF, radius: Float, colors: IntArray, stroke: Int? = null, sw: Float = 1f) {
+            p.shader = LinearGradient(r.left, r.top, r.right, r.bottom, colors, null, Shader.TileMode.CLAMP)
+            p.style = Paint.Style.FILL; c.drawRoundRect(r, radius, radius, p); p.shader = null
+            if (stroke != null) { paint(stroke, Paint.Style.STROKE, sw); c.drawRoundRect(r, radius, radius, p); p.style = Paint.Style.FILL }
+        }
+
+        private fun drawStar(c: Canvas, x: Float, y: Float, radius: Float, alpha: Int) {
+            paint(Color.argb(alpha, 255, 220, 130))
+            p.setShadowLayer(radius * 3f, 0f, 0f, Color.rgb(255, 177, 45))
+            c.drawCircle(x, y, radius, p); p.clearShadowLayer()
+        }
+
+        private fun drawGift(c: Canvas, r: RectF, opened: Boolean, phase: Float, hero: Boolean = false) {
+            val cx = r.centerX()
+            val baseW = r.width() * if (hero) .62f else .70f
+            val baseH = r.height() * if (hero) .43f else .42f
+            val left = cx - baseW / 2f
+            val top = r.centerY() - baseH * .30f
+            val right = cx + baseW / 2f
+            val bottom = top + baseH
+            val lift = if (opened) -baseH * (.22f + .60f * phase) else 0f
+            // Ground shadow and luminous pedestal
+            paint(Color.argb(120, 0, 0, 0)); p.setShadowLayer(18f, 0f, 8f, Color.BLACK)
+            c.drawOval(RectF(left - baseW*.12f, bottom - 2f, right + baseW*.12f, bottom + baseH*.20f), p); p.clearShadowLayer()
+            // Gift body with dimensional side face
+            val front = RectF(left, top, right, bottom)
+            p.shader = LinearGradient(left, top, right, bottom, intArrayOf(Color.rgb(255, 57, 69), Color.rgb(137, 3, 29), Color.rgb(67, 1, 20)), floatArrayOf(0f,.52f,1f), Shader.TileMode.CLAMP)
+            c.drawRoundRect(front, baseW*.035f, baseW*.035f, p); p.shader = null
+            val side = Path().apply { moveTo(right, top); lineTo(right + baseW*.12f, top - baseH*.09f); lineTo(right + baseW*.12f, bottom - baseH*.08f); lineTo(right, bottom); close() }
+            p.shader = LinearGradient(right, top, right + baseW*.12f, bottom, intArrayOf(Color.rgb(105,0,22),Color.rgb(35,0,12)),null,Shader.TileMode.CLAMP)
+            c.drawPath(side,p); p.shader = null
+            val lidY = top - baseH*.12f + lift
+            val lid = RectF(left-baseW*.07f, lidY, right+baseW*.07f, lidY+baseH*.17f)
+            p.shader = LinearGradient(lid.left,lid.top,lid.right,lid.bottom,intArrayOf(Color.rgb(255,224,140),Color.rgb(180,111,27),Color.rgb(255,207,91)),null,Shader.TileMode.CLAMP)
+            c.drawRoundRect(lid,baseW*.035f,baseW*.035f,p); p.shader = null
+            // Wide metallic ribbon wrapping body
+            val ribbonW = baseW*.16f
+            p.shader = LinearGradient(cx-ribbonW/2,top,cx+ribbonW/2,bottom,intArrayOf(Color.rgb(255,240,174),Color.rgb(190,123,34),Color.rgb(255,222,119)),null,Shader.TileMode.CLAMP)
+            c.drawRect(cx-ribbonW/2,top,cx+ribbonW/2,bottom,p); p.shader = null
+            p.shader = LinearGradient(left,top+baseH*.38f,right,top+baseH*.51f,intArrayOf(Color.rgb(255,225,133),Color.rgb(170,104,25),Color.rgb(255,220,118)),null,Shader.TileMode.CLAMP)
+            c.drawRect(left,top+baseH*.38f,right,top+baseH*.51f,p); p.shader = null
+            // Floating lid and metallic bow
+            if (opened) c.save()
+            val bowY = lidY + if (opened) -baseH*.02f else 0f
+            paint(paleGold,Paint.Style.STROKE, max(3f,baseW*.035f)); p.strokeCap = Paint.Cap.ROUND
+            val bow = Path().apply {
+                moveTo(cx,bowY)
+                cubicTo(cx-baseW*.55f,bowY-baseH*.55f,cx-baseW*.52f,bowY+baseH*.04f,cx,bowY)
+                cubicTo(cx+baseW*.52f,bowY+baseH*.04f,cx+baseW*.55f,bowY-baseH*.55f,cx,bowY)
             }
+            c.drawPath(bow,p); p.style = Paint.Style.FILL
+            paint(Color.rgb(255,232,155)); c.drawCircle(cx,bowY,baseW*.045f,p)
+            // Glowing magic burst inside the open gift
+            if (opened) {
+                val glow = Paint(Paint.ANTI_ALIAS_FLAG)
+                glow.shader = RadialGradient(cx,top,baseW*.85f,intArrayOf(Color.argb((190*(1f-phase)).toInt().coerceIn(0,190),255,228,145),Color.argb(0,255,176,40)),null,Shader.TileMode.CLAMP)
+                c.drawCircle(cx,top,baseW*.85f,glow)
+                for (i in 0..25) {
+                    val a = i * (Math.PI*2/26.0) + phase*2
+                    val dist = baseW*(.18f + phase*.65f)
+                    drawStar(c,cx+cos(a).toFloat()*dist,top+sin(a).toFloat()*dist,2f+phase*3f,220)
+                }
+                c.restore()
+            }
+        }
+
+        private fun drawBackdrop(c: Canvas, w: Float, h: Float) {
+            p.shader = RadialGradient(w*.5f,h*.35f,w*.82f,intArrayOf(Color.rgb(94,10,30),Color.rgb(35,4,18),Color.rgb(5,3,9)),null,Shader.TileMode.CLAMP)
+            c.drawRect(0f,0f,w,h,p); p.shader = null
+            // theatre spotlights
+            val sweep = (System.currentTimeMillis()%9000L)/9000f
+            for (i in 0..1) {
+                val sx = if (i==0) w*.08f else w*.92f
+                val ex = w*(if(i==0) .34f+.08f*sin(sweep*6.28f) else .66f-.08f*sin(sweep*6.28f))
+                val beam = Path().apply { moveTo(sx,h*.04f); lineTo(ex-w*.13f,h*.72f); lineTo(ex+w*.13f,h*.72f); close() }
+                p.shader = LinearGradient(sx,h*.05f,ex,h*.72f,intArrayOf(Color.argb(0,255,211,123),Color.argb(24,255,188,75),Color.argb(0,255,211,123)),null,Shader.TileMode.CLAMP)
+                c.drawPath(beam,p); p.shader = null
+                paint(Color.argb(180,255,229,161)); p.setShadowLayer(18f,0f,0f,Color.rgb(255,174,52))
+                c.drawCircle(sx,h*.045f,h*.009f,p); p.clearShadowLayer()
+            }
+            val now = System.currentTimeMillis()
+            for (s in sparkles) {
+                val y = ((s[1] + (now%16000L)/16000f*.12f) % 1f) * h
+                val twinkle = (100 + 130*(.5+.5*sin(now/550.0+s[3]))).toInt()
+                drawStar(c,s[0]*w,y,s[2],twinkle)
+            }
+            // Fine double gold frame
+            paint(Color.argb(180,222,171,76),Paint.Style.STROKE,2f); c.drawRoundRect(RectF(12f,10f,w-12f,h-10f),26f,26f,p)
+            paint(Color.argb(75,255,232,166),Paint.Style.STROKE,1f); c.drawRoundRect(RectF(20f,18f,w-20f,h-18f),22f,22f,p)
         }
 
         override fun onDraw(c: Canvas) {
             super.onDraw(c)
-            val w = width.toFloat(); val h = height.toFloat()
-            c.drawColor(Color.rgb(7, 5, 10))
-            p.shader = LinearGradient(0f, 0f, w, h, intArrayOf(Color.rgb(8, 6, 13), Color.rgb(51, 5, 20), Color.rgb(9, 6, 12)), null, Shader.TileMode.CLAMP)
-            c.drawRect(0f, 0f, w, h, p); p.shader = null
-            p.style = Paint.Style.STROKE; p.strokeWidth = 2f; p.color = Color.argb(150, 194, 145, 57)
-            c.drawRoundRect(RectF(9f, 9f, w - 9f, h - 9f), 25f, 25f, p); p.style = Paint.Style.FILL
-            txt(c, "BIO KUTAK", w * .5f, h * .075f, h * .058f, gold)
-            txt(c, "15 GODINA ZAJEDNO", w * .5f, h * .125f, h * .027f, cream)
-            txt(c, if (reveal) "VAŠ POKLON JE SPREMAN!" else "IZABERITE JEDAN OD 15 POKLON-PAKETA", w * .5f, h * .185f, h * .026f, gold)
-            val marginX = w * .055f; val gapX = w * .018f; val gapY = h * .025f
-            val gridTop = h * .235f; val gridBottom = h * .89f
-            val cellW = (w - 2 * marginX - 4 * gapX) / 5f
-            val cellH = (gridBottom - gridTop - 2 * gapY) / 3f
-            for (i in 0 until 15) {
-                val col = i % 5; val row = i / 5
-                val x = marginX + col * (cellW + gapX); val y = gridTop + row * (cellH + gapY)
-                val card = RectF(x, y, x + cellW, y + cellH)
-                val isChosen = selected == i
-                val isDimmed = selected >= 0 && selected != i
-                val enabled = available(packages[i])
-                val alpha = if (isDimmed) 55 else if (!enabled) 85 else 255
-                p.alpha = alpha; p.shader = LinearGradient(x, y, x + cellW, y + cellH, intArrayOf(Color.rgb(83, 13, 29), Color.rgb(23, 10, 18), Color.rgb(60, 11, 25)), null, Shader.TileMode.CLAMP)
-                c.drawRoundRect(card, 17f, 17f, p); p.shader = null; p.alpha = 255
-                p.style = Paint.Style.STROKE; p.strokeWidth = if (isChosen) 5f else 2f; p.color = if (isChosen) Color.WHITE else if (enabled) gold else Color.rgb(91, 77, 71)
-                c.drawRoundRect(card, 17f, 17f, p); p.style = Paint.Style.FILL
-                if (isChosen && opening) {
-                    val t = ((System.currentTimeMillis() - animationStart) / 4800f).coerceIn(0f, 1f)
-                    animationProgress = t
-                    val ease = if (t < .58f) (t / .58f) else 1f - (1f - (t - .58f) / .42f).pow(3)
-                    val boxRect = RectF(card.left + cellW * .08f, card.top + cellH * .05f, card.right - cellW * .08f, card.bottom - cellH * .08f)
-                    c.save(); val scale = 1f + .16f * sin(ease * Math.PI).toFloat()
-                    c.scale(scale, scale, card.centerX(), card.centerY())
-                    drawGift(c, boxRect, t > .72f, 1.15f)
-                    c.restore()
-                    txt(c, if (t < .72f) "OTVARANJE..." else "IZNENAĐENJE!", card.centerX(), card.bottom - 10f, h * .018f, gold)
-                    if (t < 1f) postInvalidateOnAnimation() else finishOpening()
+            val w=width.toFloat(); val h=height.toFloat()
+            drawBackdrop(c,w,h)
+            // Header plaque
+            val plaque=RectF(w*.22f,h*.025f,w*.78f,h*.155f)
+            rounded(c,plaque,22f,intArrayOf(Color.rgb(58,7,22),Color.rgb(19,5,12)),gold,2.5f)
+            text(c,"BIO KUTAK",w*.5f,h*.078f,h*.052f,paleGold)
+            text(c,"15 GODINA ZAJEDNO",w*.5f,h*.126f,h*.025f,cream)
+            text(c,if(reveal) "VEČE ZA PAMĆENJE — ČESTITAMO!" else "IZABERITE SVOJ SREĆNI POKLON",w*.5f,h*.205f,h*.029f,gold)
+            // subtle decorative separators
+            paint(Color.argb(190,213,158,63),Paint.Style.STROKE,1.5f)
+            c.drawLine(w*.12f,h*.222f,w*.34f,h*.222f,p); c.drawLine(w*.66f,h*.222f,w*.88f,h*.222f,p)
+            val mx=w*.045f; val gx=w*.014f; val gy=h*.022f
+            val top=h*.255f; val bottom=h*.885f
+            val cw=(w-2*mx-4*gx)/5f; val ch=(bottom-top-2*gy)/3f
+            for(i in 0 until 15) {
+                val col=i%5; val row=i/5
+                val x=mx+col*(cw+gx); val y=top+row*(ch+gy)
+                val card=RectF(x,y,x+cw,y+ch)
+                val chosen=selected==i
+                val enabled=available(packages[i])
+                val dim=selected>=0 && !chosen
+                val alpha=if(dim) 58 else if(!enabled) 70 else 255
+                c.saveLayerAlpha(card,alpha)
+                // card has bevelled dark glass and inset trim
+                rounded(c,card,18f,intArrayOf(Color.rgb(80,13,31),Color.rgb(23,7,17),Color.rgb(52,7,22)),if(chosen) paleGold else if(enabled) Color.rgb(187,132,48) else Color.rgb(79,65,61),if(chosen) 4f else 1.5f)
+                val inner=RectF(card.left+5,card.top+5,card.right-5,card.bottom-5)
+                paint(Color.argb(65,255,228,155),Paint.Style.STROKE,1f); c.drawRoundRect(inner,14f,14f,p)
+                if(chosen && opening) {
+                    val t=((System.currentTimeMillis()-animationStart)/4800f).coerceIn(0f,1f)
+                    animationProgress=t
+                    val ease=if(t<.58f) t/.58f else 1f-(1f-(t-.58f)/.42f).pow(3)
+                    val br=RectF(card.left+cw*.07f,card.top+ch*.02f,card.right-cw*.07f,card.bottom-ch*.02f)
+                    c.save(); val scale=1f+.18f*sin(ease*Math.PI).toFloat()
+                    c.scale(scale,scale,card.centerX(),card.centerY())
+                    drawGift(c,br,t>.68f,ease,false); c.restore()
+                    text(c,if(t<.68f) "OTVARANJE POKLONA..." else "MAGIJA!",card.centerX(),card.bottom-h*.012f,h*.017f,gold)
+                    if(t<1f) postInvalidateOnAnimation() else finishOpening()
                 } else {
-                    val boxRect = RectF(card.left + cellW * .08f, card.top + cellH * .03f, card.right - cellW * .08f, card.bottom - cellH * .08f)
-                    drawGift(c, boxRect, isChosen && reveal, 1f)
-                    txt(c, String.format("%02d", i + 1), card.centerX(), card.top + h * .028f, h * .020f, gold)
-                    txt(c, packages[i].name.uppercase().take(22), card.centerX(), card.bottom - h * .018f, h * .018f, if (enabled) cream else Color.LTGRAY)
-                    if (!enabled) txt(c, "ISCRPLJEN", card.centerX(), card.centerY(), h * .022f, Color.rgb(255, 128, 128))
+                    // embossed package number medallion
+                    val med=RectF(card.centerX()-cw*.13f,card.top+ch*.025f,card.centerX()+cw*.13f,card.top+ch*.15f)
+                    rounded(c,med,med.height()*.45f,intArrayOf(Color.rgb(255,220,130),Color.rgb(139,81,20)),Color.rgb(255,239,182),1f)
+                    text(c,String.format("%02d",i+1),card.centerX(),med.centerY()+h*.008f,h*.022f,Color.rgb(55,20,8))
+                    val br=RectF(card.left+cw*.06f,card.top+ch*.12f,card.right-cw*.06f,card.bottom-ch*.10f)
+                    drawGift(c,br,chosen&&reveal,1f,false)
+                    text(c,packages[i].name.uppercase().take(20),card.centerX(),card.bottom-h*.018f,h*.016f,cream)
+                    if(!enabled) text(c,"RASPRODATO",card.centerX(),card.centerY()+h*.045f,h*.018f,Color.rgb(255,150,150))
                 }
+                if(i==focused && selected<0 && enabled) {
+                    paint(Color.argb(220,255,224,135),Paint.Style.STROKE,2.5f)
+                    c.drawRoundRect(RectF(card.left-3,card.top-3,card.right+3,card.bottom+3),20f,20f,p)
+                }
+                c.restore()
             }
-            if (reveal) {
-                val overlay = RectF(w * .22f, h * .29f, w * .78f, h * .77f)
-                p.color = Color.argb(245, 14, 8, 15); c.drawRoundRect(overlay, 30f, 30f, p)
-                p.style = Paint.Style.STROKE; p.strokeWidth = 4f; p.color = gold; c.drawRoundRect(overlay, 30f, 30f, p); p.style = Paint.Style.FILL
-                txt(c, "ČESTITAMO!", w * .5f, h * .405f, h * .060f, gold)
-                txt(c, "OSVOJILI STE", w * .5f, h * .49f, h * .027f, cream)
-                txt(c, rewardText.uppercase().take(42), w * .5f, h * .565f, h * .042f, Color.WHITE)
-                txt(c, "HVALA ŠTO STE DEO NAŠE PRIČE", w * .5f, h * .625f, h * .020f, gold)
-                val b = RectF(w * .36f, h * .68f, w * .64f, h * .745f)
-                p.color = red; c.drawRoundRect(b, 18f, 18f, p); p.style = Paint.Style.STROKE; p.strokeWidth = 3f; p.color = gold; c.drawRoundRect(b, 18f, 18f, p); p.style = Paint.Style.FILL
-                txt(c, "SLEDEĆI KUPAC", w * .5f, h * .725f, h * .024f, cream)
-            } else if (!opening) {
-                txt(c, "DODIRNITE PAKET KOJI ŽELITE", w * .5f, h * .94f, h * .021f, cream, false)
+            if(reveal) {
+                // Full-screen cinematic prize reveal over a darkened stage
+                paint(Color.argb(205,3,1,7)); c.drawRect(0f,0f,w,h,p)
+                val panel=RectF(w*.17f,h*.19f,w*.83f,h*.84f)
+                p.shader=LinearGradient(panel.left,panel.top,panel.right,panel.bottom,intArrayOf(Color.rgb(92,7,27),Color.rgb(20,5,14),Color.rgb(71,5,23)),null,Shader.TileMode.CLAMP)
+                c.drawRoundRect(panel,34f,34f,p); p.shader=null
+                paint(Color.rgb(255,214,112),Paint.Style.STROKE,5f); c.drawRoundRect(panel,34f,34f,p)
+                paint(Color.argb(100,255,232,160),Paint.Style.STROKE,1.5f); c.drawRoundRect(RectF(panel.left+10,panel.top+10,panel.right-10,panel.bottom-10),27f,27f,p)
+                // gold fireworks
+                val now=System.currentTimeMillis()
+                for(burst in 0..3) {
+                    val bx=panel.left+panel.width()*(.18f+burst*.21f)
+                    val by=panel.top+panel.height()*(.20f+(burst%2)*.08f)
+                    for(k in 0..23) {
+                        val a=k*Math.PI*2/24
+                        val d=18f+((now/30+k*7+burst*19)%55)
+                        drawStar(c,bx+cos(a).toFloat()*d,by+sin(a).toFloat()*d,2.2f,220)
+                    }
+                }
+                text(c,"ČESTITAMO!",w*.5f,h*.32f,h*.065f,paleGold)
+                text(c,"OSVOJILI STE",w*.5f,h*.405f,h*.028f,cream)
+                // prize presented as a gold illuminated title plate
+                val prizePlate=RectF(w*.25f,h*.455f,w*.75f,h*.59f)
+                rounded(c,prizePlate,18f,intArrayOf(Color.rgb(255,227,153),Color.rgb(157,97,27),Color.rgb(255,218,119)),Color.WHITE,2f)
+                text(c,rewardText.uppercase().take(48),w*.5f,h*.535f,h*.037f,Color.rgb(47,13,9))
+                text(c,"HVALA ŠTO STE DEO NAŠE PRIČE",w*.5f,h*.645f,h*.023f,paleGold)
+                text(c,"BIO KUTAK  •  15 GODINA ZAJEDNO",w*.5f,h*.69f,h*.018f,cream,false)
+                val btn=RectF(w*.36f,h*.735f,w*.64f,h*.815f)
+                rounded(c,btn,18f,intArrayOf(Color.rgb(255,214,116),Color.rgb(139,77,18)),Color.WHITE,2f)
+                text(c,"SLEDEĆI KUPAC",w*.5f,h*.768f,h*.023f,Color.rgb(43,12,7))
             } else {
-                txt(c, "BIO KUTAK • 15 GODINA ZAJEDNO", w * .5f, h * .94f, h * .021f, gold)
+                text(c,if(opening) "SAČEKAJTE IZNENAĐENJE..." else "DODIRNITE PAKET I OTKRIJTE SVOJ POKLON",w*.5f,h*.945f,h*.022f,cream,false)
             }
-            // Admin remains discreet but clearly accessible at upper-right.
-            val admin = RectF(w * .89f, h * .025f, w * .98f, h * .095f)
-            p.color = Color.rgb(54, 30, 20); c.drawRoundRect(admin, 12f, 12f, p)
-            p.style = Paint.Style.STROKE; p.strokeWidth = 2f; p.color = gold; c.drawRoundRect(admin, 12f, 12f, p); p.style = Paint.Style.FILL
-            txt(c, "ADMIN", admin.centerX(), admin.centerY() + h * .008f, h * .018f, gold)
+            // discreet but visible admin control
+            val admin=RectF(w*.885f,h*.035f,w*.975f,h*.105f)
+            rounded(c,admin,12f,intArrayOf(Color.rgb(110,65,21),Color.rgb(40,19,12)),gold,1.5f)
+            text(c,"ADMIN",admin.centerX(),admin.centerY()+h*.007f,h*.018f,paleGold)
+            if(!reveal) postInvalidateOnAnimation()
+        }
+
+        private fun packageAt(x:Float,y:Float):Int {
+            val mx=.045f; val gx=.014f; val gy=.022f; val top=.255f; val bottom=.885f
+            val cw=(1f-2*mx-4*gx)/5f; val ch=(bottom-top-2*gy)/3f
+            if(x<mx || x>1f-mx || y<top || y>bottom) return -1
+            val col=((x-mx)/(cw+gx)).toInt().coerceIn(0,4)
+            val row=((y-top)/(ch+gy)).toInt().coerceIn(0,2)
+            val lx=(x-mx)-col*(cw+gx); val ly=(y-top)-row*(ch+gy)
+            return if(lx<=cw && ly<=ch) row*5+col else -1
         }
 
         override fun onTouchEvent(event: MotionEvent): Boolean {
-            if (event.action != MotionEvent.ACTION_UP) return true
-            val x = event.x / width; val y = event.y / height
-            if (x > .88f && y < .12f) { askPin { adminDialog() }; return true }
-            if (reveal) {
-                if (x in .30f.. .70f && y in .65f.. .80f) nextCustomer()
-                return true
-            }
-            if (!opening && selected < 0) {
-                val marginX = .055f; val gapX = .018f; val gapY = .025f
-                val gridTop = .235f; val gridBottom = .89f
-                val cellW = (1f - 2 * marginX - 4 * gapX) / 5f
-                val cellH = (gridBottom - gridTop - 2 * gapY) / 3f
-                if (x >= marginX && x <= 1f - marginX && y >= gridTop && y <= gridBottom) {
-                    val col = ((x - marginX) / (cellW + gapX)).toInt().coerceIn(0, 4)
-                    val row = ((y - gridTop) / (cellH + gapY)).toInt().coerceIn(0, 2)
-                    val lx = (x - marginX) - col * (cellW + gapX)
-                    val ly = (y - gridTop) - row * (cellH + gapY)
-                    if (lx <= cellW && ly <= cellH) choosePackage(row * 5 + col)
-                }
-            }
+            if(event.action!=MotionEvent.ACTION_UP) return true
+            val x=event.x/width; val y=event.y/height
+            if(x>.88f && y<.12f) { askPin { adminDialog() }; return true }
+            if(reveal) { if(x in .30f.. .70f && y in .70f.. .85f) nextCustomer(); return true }
+            if(!opening && selected<0) packageAt(x,y).takeIf { it>=0 }?.let { focused=it; choosePackage(it) }
             return true
         }
+
+        fun moveFocus(dx:Int,dy:Int) {
+            if(selected>=0 || opening || reveal) return
+            val col=(focused%5+dx).coerceIn(0,4)
+            val row=(focused/5+dy).coerceIn(0,2)
+            focused=row*5+col; invalidate()
+        }
+        fun activateFocus() {
+            if(reveal) nextCustomer() else if(!opening && selected<0) choosePackage(focused)
+        }
     }
+}
 }
